@@ -1,24 +1,24 @@
 package main
 
 import (
+	"log"
+	"os"
 	"time"
 )
 
 const (
-	BUF_LEN      = 1024
-	CMD_PING     = "cmd_ping"
-	CMD_OK       = "cmd_ok"
-	CMD_REGISTER = "cmd_register"
+	BUF_LEN = 1024
 )
 
 var (
-	host   = "0.0.0.0"
-	port   = "6666"
-	blance *Blance
+	host, port string      = "0.0.0.0", "8090"
+	blance     *Blance     = nil
+	loger      *log.Logger = nil
 )
 
 func init() {
-	blance = &Blance{make(chan *Center), make(map[uint32]*Center), nil}
+	blance = NewBlance()
+	loger = log.New(os.Stdout, "[BLANCE] ", log.Ldate|log.Ltime)
 }
 
 func Demon() {

@@ -1,26 +1,84 @@
 package main
 
 import (
-	"fmt"
+	"encoding/json"
 	"net"
+	"time"
+)
+
+const (
+	CMD_PING = 1
+)
+
+var (
+	frequency  int64 = 2
+	heartTimes int64 = 2
 )
 
 type Blance struct {
-	pings    chan *Center
-	centers  map[uint32]*Center
+	servers  map[uint32]*Server
 	listener *net.TCPListener
+	qclose   chan *Server
+	qconnect chan *net.TCPConn
+	qmessage chan *Message
+}
+
+type Message struct {
+	data   []byte
+	server *Server
+}
+
+type Cmd struct {
+	Code int
+	Data []byte
+}
+
+func NewBlance() *Blance {
+	return &Blance{
+		servers:  make(map[uint32]*Server),
+		listener: nil,
+		qclose:   make(chan *Server),
+		qconnect: make(chan *net.TCPConn),
+		qmessage: make(chan *Message),
+	}
+}
+
+//heart broad to all server
+func (blance *Blance) HeartBroad() {
+	for {
+		for _, server := range blance.servers {
+
+			cmd := &Cmd{CMD_PING, []byte("heart")}
+			buf, err := json.Marshal(cmd)
+			if err != nil {
+				loger.Println("cmd json error.")
+				continue
+			}
+
+			server.Send(buf)
+
+			//heart time timeout
+			ntime := time.Now().Unix()
+			if (ntime - server.lastHeart) > (heartTimes * frequency) {
+				blance.DelServer(server)
+			}
+		}
+
+		time.Sleep(time.Second * time.Duration(frequency))
+	}
 }
 
 func (blance *Blance) Dispatch() {
 	for {
 		select {
-		case center := <-blance.pings:
-			//send reply
-			_, err := center.Write(CMD_OK)
-			if err != nil {
-				fmt.Println("error send reply:", err.Error())
-				center.Close()
-			}
+		case server := <-blance.qclose:
+			blance.DelServer(server)
+			break
+		case conn := <-blance.qconnect:
+			blance.AddServer(conn)
+			break
+		case message := <-blance.qmessage:
+			blance.Qmessage(message)
 			break
 		}
 	}
@@ -29,32 +87,33 @@ func (blance *Blance) Dispatch() {
 func (blance *Blance) Start() {
 	listener, err := blance.Listen()
 	if err != nil {
-		fmt.Println("error connect : ", err.Error())
+		loger.Println("error connect : ", err.Error())
 		return
 	}
 	blance.listener = listener
 
 	//start accept
 	go blance.AcceptTcp()
+	//start heartbroad runtime
+	go blance.HeartBroad()
 	//dispatch conn msg
 	go blance.Dispatch()
 }
 
 func (blance *Blance) Listen() (*net.TCPListener, error) {
-	fmt.Print("start listened")
 
 	addr, err := net.ResolveTCPAddr("tcp", host+":"+port)
 	if err != nil {
-		fmt.Println("...faild")
+		loger.Println("listen faild.")
 		return nil, err
 	}
 
 	listener, err := net.ListenTCP("tcp", addr)
 	if err != nil {
-		fmt.Println("...faild")
+		loger.Println("listen faild.")
 		return nil, err
 	}
-	fmt.Println("...success.")
+	loger.Println("started listen.")
 	return listener, nil
 }
 
@@ -63,21 +122,52 @@ func (blance *Blance) AcceptTcp() {
 		if blance.listener != nil {
 			conn, err := blance.listener.AcceptTCP()
 			if err != nil {
-				fmt.Println("error accept:", err.Error())
+				loger.Println("error accept:", err.Error())
 				continue
 			}
-			blance.NewCenter(conn)
+
+			blance.qconnect <- conn
 		}
 	}
 }
 
-func (blance *Blance) NewCenter(conn *net.TCPConn) {
-	center := NewCenter(conn)
-	if _, ok := blance.centers[center.uhost]; !ok {
-		blance.centers[center.uhost] = center
+func (blance *Blance) Qmessage(msg *Message) {
+	server := msg.server
+	server.lastHeart = time.Now().Unix()
+
+	var cmd Cmd
+	err := json.Unmarshal(msg.data, &cmd)
+	if err != nil {
+		return
 	}
-	//center loop and deal msg
-	go center.Demon()
+	//
+	switch cmd.Code {
+	case CMD_PING:
+		var stat Stat
+		err = json.Unmarshal(cmd.Data, &stat)
+		if err != nil {
+			loger.Println("ping unmarshal error:", err.Error())
+			break
+		}
+		server.stat = &stat
+		break
+	}
+}
+
+func (blance *Blance) AddServer(conn *net.TCPConn) {
+	server := NewServer(conn)
+	loger.Println(server.host, server.port, " connected.")
+	if _, ok := blance.servers[server.uhost]; !ok {
+		blance.servers[server.uhost] = server
+	}
+	//server loop and deal msg
+	server.Start()
+}
+
+func (blance *Blance) DelServer(server *Server) {
+	loger.Println(server.host, server.port, " closed.")
+	delete(blance.servers, server.uhost)
+	server.Close()
 }
 
 func (blance *Blance) Close() {
@@ -86,7 +176,7 @@ func (blance *Blance) Close() {
 		blance.listener = nil
 	}
 
-	for _, center := range blance.centers {
-		center.Close()
+	for _, server := range blance.servers {
+		server.Close()
 	}
 }
