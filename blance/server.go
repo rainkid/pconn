@@ -29,7 +29,7 @@ func NewServer(conn *net.TCPConn) *Server {
 	ip := strings.Split(conn.RemoteAddr().String(), ":")
 	return &Server{
 		host:      ip[0],
-		uhost:     utils.Ip2Uint32(host),
+		uhost:     utils.Ip2Uint32(ip[0]),
 		port:      ip[1],
 		conn:      conn,
 		lastHeart: time.Now().Unix(),

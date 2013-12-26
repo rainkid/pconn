@@ -11,7 +11,7 @@ const (
 )
 
 var (
-	frequency         int64 = 5
+	frequency         int64 = 2
 	heartTimeOutTimes int64 = 2
 )
 
@@ -55,6 +55,7 @@ func (blance *Blance) HeartBroad() {
 				continue
 			}
 
+			//send heart
 			server.Send(buf)
 
 			//heart time timeout
@@ -63,7 +64,6 @@ func (blance *Blance) HeartBroad() {
 				blance.DelServer(server)
 			}
 		}
-
 		time.Sleep(time.Second * time.Duration(frequency))
 	}
 }
@@ -149,6 +149,7 @@ func (blance *Blance) Qmessage(msg *Message) {
 			loger.Println("ping unmarshal error:", err.Error())
 			break
 		}
+		loger.Println(server)
 		server.stat = &stat
 		break
 	}
@@ -157,9 +158,9 @@ func (blance *Blance) Qmessage(msg *Message) {
 func (blance *Blance) AddServer(conn *net.TCPConn) {
 	server := NewServer(conn)
 	loger.Println(server.host, server.port, " connected.")
-	/*if _, ok := blance.servers[server.uhost]; !ok {
+	if _, ok := blance.servers[server.uhost]; !ok {
 		blance.servers[server.uhost] = server
-	}*/
+	}
 	//server loop and deal msg
 	server.Start()
 }

@@ -29,9 +29,8 @@ var (
 )
 
 type Server struct {
-	conn    *net.TCPConn
-	stat    *Stat
-	Clients *Client
+	conn *net.TCPConn
+	stat *Stat
 }
 
 type Stat struct {
@@ -48,10 +47,8 @@ type Cmd struct {
 }
 
 func init() {
-	server = &Server{
-		conn: nil,
-		stat: nil,
-	}
+	server = &Server{}
+	server.stat = server.Stat()
 	loger = log.New(os.Stdout, "[CENTER] ", log.Ldate|log.Ltime)
 }
 
@@ -177,7 +174,7 @@ func main() {
 	defer func() {
 		server.Close()
 	}()
-	server.Stat()
+
 	go server.Listen()
 	Demon()
 }
