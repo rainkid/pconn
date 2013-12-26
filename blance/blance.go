@@ -11,8 +11,8 @@ const (
 )
 
 var (
-	frequency  int64 = 2
-	heartTimes int64 = 2
+	frequency         int64 = 5
+	heartTimeOutTimes int64 = 2
 )
 
 type Blance struct {
@@ -59,7 +59,7 @@ func (blance *Blance) HeartBroad() {
 
 			//heart time timeout
 			ntime := time.Now().Unix()
-			if (ntime - server.lastHeart) > (heartTimes * frequency) {
+			if (ntime - server.lastHeart) > (heartTimeOutTimes * frequency) {
 				blance.DelServer(server)
 			}
 		}
@@ -157,9 +157,9 @@ func (blance *Blance) Qmessage(msg *Message) {
 func (blance *Blance) AddServer(conn *net.TCPConn) {
 	server := NewServer(conn)
 	loger.Println(server.host, server.port, " connected.")
-	if _, ok := blance.servers[server.uhost]; !ok {
+	/*if _, ok := blance.servers[server.uhost]; !ok {
 		blance.servers[server.uhost] = server
-	}
+	}*/
 	//server loop and deal msg
 	server.Start()
 }

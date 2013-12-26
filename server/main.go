@@ -64,26 +64,6 @@ func Demon() {
 	}
 }
 
-func (server *Server) Ping() {
-	for {
-		if server.conn != nil {
-			_, err := server.Write("stat")
-			if err != nil {
-				loger.Println("heartbeat error : ", err.Error())
-			}
-
-			data := make([]byte, BUF_LEN)
-			_, err = server.Read(data)
-			if err == io.EOF {
-				loger.Println("heartbeat read error:", err.Error())
-				server.Close()
-			}
-			loger.Println("heartbeat recived:", string(data))
-		}
-		time.Sleep(time.Second * 1)
-	}
-}
-
 func (server *Server) Send(buf []byte) (int, error) {
 	if server.conn != nil {
 		n, err := server.Write(string(buf))
@@ -102,8 +82,8 @@ func (server *Server) Listen() {
 			data := make([]byte, BUF_LEN)
 			n, err := server.Read(data)
 			if err == io.EOF {
-				loger.Println("read error:", err.Error())
 				server.Close()
+				continue
 			}
 
 			//send message
@@ -117,7 +97,7 @@ func (server *Server) Cmd(data []byte) {
 	var cmd Cmd
 	err := json.Unmarshal(data, &cmd)
 	if err != nil {
-		fmt.Println("cmd json unmarshal error:", err.Error())
+		loger.Println("cmd json unmarshal error:", err.Error())
 	}
 
 	//dispatch cmd
@@ -184,6 +164,7 @@ func (server *Server) Stat() *Stat {
 }
 
 func (server *Server) Close() {
+	loger.Println("server closed.")
 	if server.conn != nil {
 		server.conn.Close()
 		server.conn = nil
