@@ -1,20 +1,24 @@
-package main
+package mserver
 
 import (
+	"encoding/json"
 	"io"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 	"utils"
 )
 
 type Server struct {
+	manager   *Manager
 	host      string
 	uhost     uint32
-	port      string
+	port      uint32
 	conn      *net.TCPConn
 	lastHeart int64
 	stat      *Stat
+	weight    int64
 }
 
 type Stat struct {
@@ -23,18 +27,44 @@ type Stat struct {
 	Load15  float64
 	Cpunum  int
 	Memused float64
+	Clients int
 }
 
-func NewServer(conn *net.TCPConn) *Server {
+func NewServer(manager *Manager, conn *net.TCPConn) *Server {
 	ip := strings.Split(conn.RemoteAddr().String(), ":")
+	port, _ := strconv.ParseUint(ip[1], 10, 64)
+
 	return &Server{
+		manager:   manager,
 		host:      ip[0],
 		uhost:     utils.Ip2Uint32(ip[0]),
-		port:      ip[1],
+		port:      uint32(port),
 		conn:      conn,
 		lastHeart: time.Now().Unix(),
 		stat:      nil,
 	}
+}
+
+func (server *Server) Heart() {
+	cmd := &Cmd{CMD_PING, []byte("heart")}
+	buf, err := json.Marshal(cmd)
+	if err != nil {
+		loger.Println("cmd json error.")
+		return
+	}
+
+	//send heart
+	_, err = server.Send(buf)
+	if err != nil {
+		loger.Println("send error,", err.Error())
+	}
+
+	//heart time timeout
+	ntime := time.Now().Unix()
+	if (ntime - server.lastHeart) > (heartTimeOutTimes * frequency) {
+		server.manager.qclose <- server
+	}
+	return
 }
 
 func (server *Server) Write(s string) (int, error) {
@@ -51,7 +81,7 @@ func (server *Server) Send(buf []byte) (int, error) {
 	if server.conn != nil {
 		n, err := server.Write(string(buf))
 		if err != nil {
-			blance.qclose <- server
+			server.manager.qclose <- server
 			loger.Println(server.host, server.port, "send error : ", err.Error())
 			return n, err
 		}
@@ -65,7 +95,7 @@ func (server *Server) Listen() {
 		n, err := server.Read(buf)
 
 		if err == io.EOF {
-			blance.qclose <- server
+			server.manager.qclose <- server
 			break
 		}
 
@@ -75,7 +105,7 @@ func (server *Server) Listen() {
 		}
 
 		msg := &Message{data: buf[0:n], server: server}
-		blance.qmessage <- msg
+		server.manager.qmessage <- msg
 	}
 }
 

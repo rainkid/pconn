@@ -1,41 +1,24 @@
 package main
 
 import (
-	"log"
-	"os"
-	"time"
-)
-
-const (
-	BUF_LEN = 1024
+	"runtime"
 )
 
 var (
-	host, port string      = "0.0.0.0", "8090"
-	blance     *Blance     = nil
-	loger      *log.Logger = nil
+	blance *Blance
 )
 
 func init() {
 	blance = NewBlance()
-	loger = log.New(os.Stdout, "[BLANCE] ", log.Ldate|log.Ltime)
-}
-
-func Demon() {
-	for {
-		if blance.listener == nil {
-			blance.Listen()
-		}
-		time.Sleep(time.Second)
-	}
 }
 
 func main() {
+	runtime.GOMAXPROCS(runtime.NumCPU() - 1)
 	defer func() {
 		blance.Close()
 	}()
 
+	go blance.Start()
 	//start blance
-	blance.Start()
-	Demon()
+	blance.Demon()
 }
